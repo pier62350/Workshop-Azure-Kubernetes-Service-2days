@@ -1,7 +1,20 @@
 ## Montées de version de l'application: Rolling update, Blue Green, Canary
 # Objectif:
 Comprendre les concepts de montées de version des applications dans un cluster Kubernetes.
-1. **Création de l'environnement de démonstration** <br>
+
+L'objectif de ce Lab 9 est aussi de voir comment répartir le trafic réseau entre plusieurs versions d'une application.
+
+Les patterns les plus classiques en termes de répartition de trafic entre plusieurs versions d'une application étant :
+- le Rolling Update
+        - https://kubernetes.io/docs/tutorials/kubernetes-basics/update/update-intro/
+- le vert/bleu (ou noir/rouge chez Netflix)
+	- https://martinfowler.com/bliki/BlueGreenDeployment.html
+- le A/B testing
+	- https://en.wikipedia.org/wiki/A/B_testing
+- le canary
+    - https://blog.itaysk.com/2017/11/20/deployment-strategies-defined#:~:text=It%E2%80%99s%20described%20next.-,Canary%20Deployment,-a.k.a
+
+# **Création de l'environnement de démonstration** <br>
 **_Déploiement du "resource group":_**
 ```
 az group create \
@@ -67,7 +80,7 @@ az aks create \
 az aks get-credentials --resource-group RG-AKS-Lab-9 --name AKS-Lab-9
 ```  
 
-2. **Build and Push les deux versions d'application** <br>
+# **Build and Push les deux versions d'application** <br>
 API v1: <br>
 -> Allez dans ./API/v1 et lancer cette commande <br>
 ```
@@ -84,7 +97,7 @@ Tests des pushs:<br>
 az acr repository show --name acrlab009 --image api/api:1.0.0
 ```
 
-3. **Déploiement de l'application**
+# **Déploiement de l'application**
 Installation de l'application:<br>
 Allez dans ./Manifest<br>
 ```
@@ -93,20 +106,60 @@ kubectl apply -f ./v1
 
 Check:
 ```
-kubectl get all --namespace namespacelab9
+watch kubectl get all --namespace namespacelab9
 ```
-En cas d'erreurs sur les pods (ImagePullBackOff), aller modifier le manifest de deployment et réappliquer les manifests
+ctl+c pour sortir <br>
+Pour visionner la version déployée <br>
+```
+kubectl rollout history deployment api-deployment --namespace namespacelab9
+```
+Pour mettre une annotation à la version (revision)<br>
+```
+kubectl annotate deployments.apps api-deployment kubernetes.io/change-cause="version blue" --namespace namespacelab9
+```
+```
+kubectl rollout history deployment api-deployment --namespace namespacelab9
+```
+```
+kubectl get all --namespace namespacelab9
+
+```
+
+Executer la commande:<br>
 
 ```
 curl http://<EXTERNAL-IP>
 ```
 
-4. **Mise à jour de l'application** <br><br>
+# **Mise à jour de l'application** <br><br>
 **_Mise à jour de l'application en "rolling updates" avec des stratégies_**<br>
 Allez dans le répertoire ./Manifest/v2/rollingupdate et observer le fichier update.yaml ( au niveau "spec et strategy").
 ```
 cd ..
 kubectl apply -f ./rollingupdate/update.yaml
+```
+Visionner la mise à jour de la version 2<br>
+```
+watch kubectl get all --namespace namespacelab9
+```
+attendre qu'il n'y est plus que trois pods<br>
+même procéder que pour la verion 1<br>
+```
+kubectl rollout history deployment api-deployment --namespace namespacelab9
+kubectl annotate deployments.apps api-deployment kubernetes.io/change-cause="version green" --namespace namespacelab9
+kubectl rollout history deployment api-deployment --namespace namespacelab9
+```
+test<br>
+```
+curl http://<EXTERNAL-IP>
+```
+Pour revenir à la version 1<br>
+```
+kubectl rollout undo deployment.apps/api-deployment --to-revision=1 --namespace namespacelab9
+```
+test<br>
+```
+curl http://<EXTERNAL-IP>
 ```
 
 **_Mise à jour de l'application avec la méthode "blue green"_**<br>
@@ -201,7 +254,7 @@ Vous devez avoir une fois sur quatre:<br>
 ```
 {"message":"hello API Green"}
 ```
-5. **Nettoyage du Lab_9**
+# **Nettoyage du Lab_9**
 ```
 az group delete --name "RG-AKS-Lab-9"
 ```
